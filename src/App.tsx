@@ -25,20 +25,22 @@ interface User {
   image: string;
 }
 
-interface DummyJsonUser {
-  id: number;
-  firstName: string;
-  lastName: string;
+interface RandomUser {
+  login: { uuid: string };
+  name: { first: string; last: string };
   email: string;
   phone: string;
-  image: string;
+  picture: { large: string };
 }
 
-interface DummyJsonApiResponse {
-  users: DummyJsonUser[];
-  total: number;
-  skip: number;
-  limit: number;
+interface RandomUserApiResponse {
+  results: RandomUser[];
+  info: {
+    results: number;
+    page: number;
+    version: string;
+    seed: string;
+  };
 }
 
 // IndexedDB Setup
@@ -64,34 +66,31 @@ function App() {
   const fetchUsers = async (): Promise<void> => {
     setLoading(true);
     setError(null);
-    
+
     try {
-      const response = await fetch('https://dummyjson.com/users?limit=50');
-      
+      const response = await fetch('https://randomuser.me/api/?results=50');
+
       if (!response.ok) {
         throw new Error(`Failed to fetch users: ${response.status} ${response.statusText}`);
       }
-      
-      const data: DummyJsonApiResponse = await response.json();
-      
-      const mappedUsers: User[] = data.users.map((user) => ({
-        id: user.id.toString(),
-        firstName: user.firstName,
-        lastName: user.lastName,
+
+      const data: RandomUserApiResponse = await response.json();
+
+      const mappedUsers: User[] = data.results.map((user) => ({
+        id: user.login.uuid,
+        firstName: user.name.first,
+        lastName: user.name.last,
         email: user.email,
         phone: user.phone,
-        image: user.image
+        image: user.picture.large
       }));
-      
-      // Step 3: Save to IndexedDB (add new users without clearing existing ones)
-      console.log('Adding', mappedUsers.length, 'new users to IndexedDB...');
+
+      // Step 3: Save to IndexedDB (Clear old data and save new batch)
+      console.log('Replacing users in IndexedDB with 50 new ones...');
+      await db.users.clear();
       await db.users.bulkPut(mappedUsers);
       console.log('✅ Data saved to IndexedDB successfully!');
-      
-      // Verify storage
-      const storedUsers = await db.users.toArray();
-      console.log('📦 Current users in IndexedDB:', storedUsers.length, storedUsers);
-      
+
       setUsers(mappedUsers);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
@@ -107,7 +106,7 @@ function App() {
         console.log('🔍 Checking IndexedDB for existing users...');
         const storedUsers = await db.users.toArray();
         console.log('📊 Found', storedUsers.length, 'users in IndexedDB:', storedUsers);
-        
+
         if (storedUsers.length > 0) {
           console.log('✅ Loading users from IndexedDB (no API call needed)');
           setUsers(storedUsers);
@@ -121,7 +120,7 @@ function App() {
         fetchUsers();
       }
     };
-    
+
     loadInitialData();
   }, []);
 
@@ -131,10 +130,10 @@ function App() {
       console.log('🗑️ Deleting user from IndexedDB:', userId);
       await db.users.delete(userId);
       console.log('✅ User deleted from IndexedDB successfully');
-      
+
       const remainingUsers = await db.users.toArray();
       console.log('📊 Remaining users in IndexedDB:', remainingUsers.length);
-      
+
       setUsers(prevUsers => prevUsers.filter(user => user.id !== userId));
     } catch (err) {
       console.error('❌ Error deleting user:', err);
@@ -148,13 +147,13 @@ function App() {
         <Typography variant="h3" component="h1" gutterBottom align="center">
           User Directory
         </Typography>
-        
+
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
           <Typography variant="h5">
             Total Users: {users.length}
           </Typography>
-          <Button 
-            variant="contained" 
+          <Button
+            variant="contained"
             startIcon={<RefreshIcon />}
             onClick={fetchUsers}
             disabled={loading}
@@ -162,23 +161,23 @@ function App() {
             Refresh
           </Button>
         </Box>
-        
+
         {loading && (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
             <CircularProgress size={60} />
           </Box>
         )}
-        
+
         {error && (
           <Alert severity="error" sx={{ mb: 3 }}>
             {error}
           </Alert>
         )}
-        
+
         {!loading && users.length > 0 && (
           <Grid container spacing={3}>
             {users.map((user) => (
-              <Grid 
+              <Grid
                 key={user.id}
                 sx={{
                   width: { xs: '100%', sm: '50%', md: '33.333%', lg: '25%' },
@@ -205,8 +204,8 @@ function App() {
                     </Typography>
                   </CardContent>
                   <CardActions>
-                    <Button 
-                      size="small" 
+                    <Button
+                      size="small"
                       color="error"
                       startIcon={<DeleteIcon />}
                       onClick={() => handleDeleteUser(user.id)}
@@ -219,7 +218,7 @@ function App() {
             ))}
           </Grid>
         )}
-        
+
         {!loading && users.length === 0 && (
           <Box sx={{ textAlign: 'center', py: 8 }}>
             <Typography variant="h6" color="text.secondary">
