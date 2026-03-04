@@ -5,9 +5,9 @@ export class UserDatabase extends Dexie {
   users!: Dexie.Table<User, string>;
 
   constructor() {
-    super('UserDatabase');
+    super('UserDirectoryDB');
     this.version(1).stores({
-      users: '++id, name.first, name.last, email'
+      users: 'id, firstName, lastName, email'
     });
   }
 }
@@ -16,6 +16,7 @@ export const db = new UserDatabase();
 
 export class UserService {
   static async getAllUsers(): Promise<User[]> {
+
     return await db.users.toArray();
   }
 
